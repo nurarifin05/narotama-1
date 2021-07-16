@@ -1,0 +1,181 @@
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <Wire.h>
+#include <Servo.h>
+#include "CTBot.h"
+
+#define ssid "punkseat" 
+#define password "baksomama" 
+#define mqtt_server "13.76.172.219"
+#define mqtt_username "skripsi"
+#define mqtt_password "2021"
+#define clientID "espClient"
+
+String token = "1825510866:AAFwdfkCVTpla2eyFN4HKnVX0ZwyBAcgDQM";
+const int id = 893370318;
+
+WiFiClient wifiClient;
+PubSubClient client(mqtt_server, 1883, wifiClient);
+long lastMsg = 100;
+
+Servo Myservo;
+int pos = 0;
+CTBot myBot;
+
+#define echoPin 14 // attach pin D5 
+#define trigPin 12 //attach pin D6 
+#define echoPin1 13 // D7
+#define trigPin1 15 //D8
+
+// defines variables
+long duration; 
+int distance; 
+
+long duration1;
+int jarakSensorDanSampah;
+long tingiTempatSampah;
+float ketinggianSampah;
+String Aman = "aman";
+String Setengah = "setengah";
+String Penuh = "penuh";
+
+
+void setup_wifi() {
+  delay(10);
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  if (client.connect(clientID, mqtt_username, mqtt_password)) {
+    Serial.println("Connected to MQTT Broker!");
+  }
+  else {
+    Serial.println("Connection to MQTT Broker failed...");
+  }
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (client.connect("arduinoClient_distance_sensor")) {
+      Serial.println("connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+
+void setup() {
+  Serial.begin(9600);
+  setup_wifi(); 
+  client.setServer(mqtt_server, 1883);  
+  pinMode(trigPin, OUTPUT); 
+  pinMode(echoPin, INPUT); 
+  pinMode(trigPin1, OUTPUT);
+  pinMode(echoPin1, INPUT);
+  Myservo.attach(5);
+   
+  tingiTempatSampah = 25;
+
+  myBot.setTelegramToken(token);
+    if (myBot.testConnection()) {
+    Serial.println("Koneksi Bagus");
+  } else {
+    Serial.println("Koneksi Jelek");
+  }
+
+  myBot.sendMessage(id, "Alat Menyala");
+  Serial.println("Pesan Terkirim");
+
+}
+void loop() {
+
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+  
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration * 0.034 / 2; 
+  // Displays the distance on the Serial Monitor
+  Serial.print("Distance Sensor Orang: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+ 
+ 
+  delay(100);
+
+  if (distance < 10){
+    Myservo.write(60);
+    Serial.println("buka tempat sampah");
+  }
+  else{
+    Myservo.write(0);
+  }
+  delay(500);
+
+  digitalWrite(trigPin1, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin1, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin1, LOW);
+
+  jarakSensorDanSampah = pulseIn(echoPin1, HIGH);
+  jarakSensorDanSampah = jarakSensorDanSampah*0.034/2;
+  Serial.print("jarak sensor Sampah: ");
+  Serial.println(jarakSensorDanSampah);
+  delay(100);
+  ketinggianSampah = tingiTempatSampah - jarakSensorDanSampah;
+  Serial.print("Tinggi Sampah: ");
+  Serial.println(ketinggianSampah);
+  //client.publish("iotdev/IsiSampah", String(ketinggianSampah).c_str(), true);
+  delay(100);
+
+//  Keterangan = ketinggianSampah;
+  if (ketinggianSampah >=0 && ketinggianSampah <= 5  ){
+    client.publish("iotdev/IsiSampah", String(ketinggianSampah).c_str(), true);
+    client.publish("iotdev/keterangan", String(Aman).c_str(), true);
+    Serial.println(Aman);
+  }else if (ketinggianSampah > 5 && ketinggianSampah <= 9){
+    client.publish("iotdev/IsiSampah", String(ketinggianSampah).c_str(), true);
+    client.publish("iotdev/keterangan", String(Setengah).c_str(), true);
+    Serial.println(Setengah);
+  }else if (ketinggianSampah > 9 && ketinggianSampah <= 30){
+    client.publish("iotdev/IsiSampah", String(ketinggianSampah).c_str(), true);
+    client.publish("iotdev/keterangan", String(Penuh).c_str(), true);
+    myBot.sendMessage(id, "PENUH SAMPAH E BOS");
+  Serial.println("Pesan Terkirim");
+    Serial.println(Penuh);
+  }
+  delay(1000);
+
+  
+
+  long now = millis();
+  if (now - lastMsg > 100) {
+    lastMsg = now;
+    }
+    
+}
